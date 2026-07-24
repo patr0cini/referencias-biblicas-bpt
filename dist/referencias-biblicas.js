@@ -251,38 +251,55 @@
   })();
   // Alternativa a data-fonte: os dados podem vir já embebidos numa variável
   // global (útil num ficheiro único, offline). Ver README.
+  function attr(nome, alt) {
+    return (script && script.getAttribute(nome)) || alt || '';
+  }
   var cfg = {
     fonte: script && script.getAttribute('data-fonte'),
     dados: global.ReferenciasBiblicasDados || null,
-    seletor: (script && script.getAttribute('data-seletor')) || 'body',
-    atribuicao: (script && script.getAttribute('data-atribuicao')) || global.ReferenciasBiblicasAtribuicao || '',
+    seletor: attr('data-seletor', 'body'),
+    atribuicao: attr('data-atribuicao', global.ReferenciasBiblicasAtribuicao),
+    // logótipo/marca opcionais e ligação (estilo do ESV Cross-Reference Tool)
+    marca: attr('data-marca', global.ReferenciasBiblicasMarca),
+    logo: attr('data-logo', global.ReferenciasBiblicasLogo),
+    url: attr('data-url', global.ReferenciasBiblicasUrl),
     max: parseInt((script && script.getAttribute('data-max')) || '', 10) || MAX_VERSICULOS_PADRAO,
     estilos: !script || script.getAttribute('data-estilos') !== 'nao',
   };
 
   // ---- Estilos (injetados; desativáveis com data-estilos="nao") ----
+  // A janela é sempre clara (como a do ESV Cross-Reference Tool), para o
+  // texto bíblico se ler bem e os logótipos aparecerem corretamente; só a
+  // referência sublinhada no texto acompanha o tema claro/escuro da página.
+  var SERIF = 'Georgia,"Times New Roman",serif';
+  var SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
   var CSS = '' +
     '.rb-ref{color:#527487;cursor:help;text-decoration:underline;' +
     'text-decoration-style:dotted;text-underline-offset:2px;border:0;background:none;' +
     'font:inherit;padding:0}' +
     '.rb-ref:hover{text-decoration-style:solid}' +
     '.rb-ref:focus-visible{outline:2px solid #527487;outline-offset:2px}' +
-    '.rb-janela{position:absolute;z-index:2147483000;max-width:min(30rem,calc(100vw - 1.5rem));' +
-    'padding:.85rem 1rem;background:#fff;color:#20323d;border:1px solid #d5e0e6;border-radius:4px;' +
-    'box-shadow:0 12px 32px rgba(20,30,40,.18);font-size:.95rem;line-height:1.55;' +
-    'font-family:inherit}' +
+    '@media (prefers-color-scheme:dark){.rb-ref{color:#8fb0c1}}' +
+    '.rb-janela{position:absolute;z-index:2147483000;width:max-content;' +
+    'max-width:min(23rem,calc(100vw - 1.5rem));background:#fff;color:#1c1c1c;' +
+    'border:1px solid #e4e4e0;border-radius:7px;overflow:hidden;' +
+    'box-shadow:0 10px 40px rgba(0,0,0,.17);font-family:' + SERIF + ';' +
+    'font-size:1rem;line-height:1.6}' +
     '.rb-janela[hidden]{display:none}' +
-    '.rb-janela p{margin:0 0 .55em}' +
-    '.rb-janela p:last-child{margin-bottom:0}' +
-    '.rb-janela b{display:block;font-size:.75rem;font-weight:700;letter-spacing:.05em;' +
-    'text-transform:uppercase;color:#527487;margin-bottom:.15em}' +
-    '.rb-fonte{margin-top:.7em;padding-top:.55em;border-top:1px solid #d5e0e6;' +
-    'font-size:.72rem;color:#566a76}' +
-    '.rb-mais{color:#566a76}' +
-    '@media (prefers-color-scheme:dark){' +
-    '.rb-ref{color:#8fb0c1}' +
-    '.rb-janela{background:#21303a;color:#e9f0f4;border-color:#32454f;box-shadow:0 12px 32px rgba(0,0,0,.5)}' +
-    '.rb-janela b{color:#8fb0c1}.rb-fonte{color:#9fb4c0;border-top-color:#32454f}}';
+    '.rb-cab{display:flex;align-items:center;gap:.5rem;padding:.62rem .9rem;' +
+    'border-bottom:1px solid #eee;background:#faf9f5}' +
+    '.rb-marca{height:20px;width:auto;flex:none}' +
+    '.rb-titulo{font-weight:700;font-size:1.02rem;color:#1c1c1c}' +
+    '.rb-corpo{padding:.8rem .9rem;color:#282828}' +
+    '.rb-corpo sup{color:#b39100;font-weight:700;font-size:.6em;' +
+    'vertical-align:.55em;margin-right:.12em;font-family:' + SANS + '}' +
+    '.rb-mais{color:#aaa}' +
+    '.rb-rodape{display:flex;align-items:center;justify-content:space-between;' +
+    'gap:.9rem;padding:.5rem .9rem;border-top:1px solid #eee;background:#faf9f5;' +
+    'font-family:' + SANS + ';font-size:.72rem;color:#8f8f86;text-decoration:none}' +
+    'a.rb-rodape:hover{background:#f2f1ea}' +
+    '.rb-rodape img{height:17px;width:auto;display:block}' +
+    '.rb-rodape .rb-seta{color:#b39100;font-size:.9rem;margin-left:.2rem}';
 
   function injetarEstilos() {
     if (!cfg.estilos) return;
@@ -367,26 +384,51 @@
     }
     if (!versos.length) return null;
 
-    // agrupa versículos seguidos num só bloco (referência em cima, texto corrido)
+    // título: agrupa versículos seguidos em intervalos (João 3:16-18, 20)
     var blocos = [];
     for (var v = 0; v < versos.length; v++) {
       var atualV = versos[v];
       var ult = blocos[blocos.length - 1];
       if (ult && ult.livro === atualV.livro && ult.capitulo === atualV.capitulo && atualV.versiculo === ult.fim + 1) {
         ult.fim = atualV.versiculo;
-        ult.textos.push(atualV.texto);
       } else {
-        blocos.push({ livro: atualV.livro, capitulo: atualV.capitulo, inicio: atualV.versiculo, fim: atualV.versiculo, textos: [atualV.texto] });
+        blocos.push({ livro: atualV.livro, capitulo: atualV.capitulo, inicio: atualV.versiculo, fim: atualV.versiculo });
       }
     }
+    var mesmoLC = blocos.every(function (b) { return b.livro === blocos[0].livro && b.capitulo === blocos[0].capitulo; });
+    var titulo;
+    if (mesmoLC) {
+      var lista = blocos.map(function (b) { return b.fim > b.inicio ? (b.inicio + '-' + b.fim) : ('' + b.inicio); }).join(', ');
+      titulo = NOMES[blocos[0].livro - 1] + ' ' + blocos[0].capitulo + ':' + lista;
+    } else {
+      titulo = blocos.map(function (b) {
+        var iv = b.fim > b.inicio ? (b.inicio + '-' + b.fim) : ('' + b.inicio);
+        return NOMES[b.livro - 1] + ' ' + b.capitulo + ':' + iv;
+      }).join('; ');
+    }
 
-    var html = blocos.map(function (b) {
-      var intervalo = b.fim > b.inicio ? (b.inicio + '-' + b.fim) : ('' + b.inicio);
-      var ref = NOMES[b.livro - 1] + ' ' + b.capitulo + ':' + intervalo;
-      return '<p><b>' + escapar(ref) + '</b> ' + escapar(b.textos.join(' ')) + '</p>';
-    }).join('');
-    if (elemento.getAttribute('data-rb-mais')) html += '<span class="rb-mais">…</span>';
-    if (cfg.atribuicao) html += '<p class="rb-fonte">' + escapar(cfg.atribuicao) + '</p>';
+    // corpo: texto corrido com o número de cada versículo em sobrescrito
+    var corpo = versos.map(function (x) {
+      return '<sup>' + x.versiculo + '</sup> ' + escapar(x.texto);
+    }).join(' ');
+    if (elemento.getAttribute('data-rb-mais')) corpo += ' <span class="rb-mais">…</span>';
+
+    var marca = cfg.marca ? '<img class="rb-marca" src="' + escapar(cfg.marca) + '" alt="">' : '';
+    var html = '<div class="rb-cab">' + marca + '<span class="rb-titulo">' + escapar(titulo) + '</span></div>'
+      + '<div class="rb-corpo">' + corpo + '</div>';
+
+    // rodapé: atribuição e/ou logótipo, opcionalmente com ligação
+    var conteudoRodape = '';
+    if (cfg.atribuicao) conteudoRodape += '<span>' + escapar(cfg.atribuicao) + '</span>';
+    if (cfg.logo) conteudoRodape += '<img src="' + escapar(cfg.logo) + '" alt="">';
+    else if (cfg.url) conteudoRodape += '<span class="rb-seta">↗</span>';
+    if (conteudoRodape) {
+      if (cfg.url) {
+        html += '<a class="rb-rodape" href="' + escapar(cfg.url) + '" target="_blank" rel="noopener">' + conteudoRodape + '</a>';
+      } else {
+        html += '<div class="rb-rodape">' + conteudoRodape + '</div>';
+      }
+    }
     return html;
   }
 
