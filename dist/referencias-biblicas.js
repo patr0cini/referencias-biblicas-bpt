@@ -460,6 +460,17 @@
 
   function esconder() { painel.hidden = true; ativo = null; }
 
+  // Fecho com pequeno atraso, para o rato poder viajar da referência até à
+  // janela (e clicar no logótipo/ligação) sem que ela desapareça a meio.
+  var timerEsconder = null;
+  function agendarEsconder() {
+    cancelarEsconder();
+    timerEsconder = setTimeout(esconder, 280);
+  }
+  function cancelarEsconder() {
+    if (timerEsconder) { clearTimeout(timerEsconder); timerEsconder = null; }
+  }
+
   function iniciarInteracao() {
     painel = document.createElement('div');
     painel.className = 'rb-janela';
@@ -471,12 +482,15 @@
 
     document.addEventListener('mouseover', function (e) {
       var alvo = e.target.closest && e.target.closest('.rb-ref');
-      if (temRato && alvo) mostrar(alvo);
+      if (temRato && alvo) { cancelarEsconder(); mostrar(alvo); }
     });
     document.addEventListener('mouseout', function (e) {
       var alvo = e.target.closest && e.target.closest('.rb-ref');
-      if (temRato && alvo && !painel.contains(e.relatedTarget)) esconder();
+      if (temRato && alvo) agendarEsconder();
     });
+    // manter aberta enquanto o rato está sobre a própria janela
+    painel.addEventListener('mouseenter', cancelarEsconder);
+    painel.addEventListener('mouseleave', agendarEsconder);
     document.addEventListener('click', function (e) {
       var alvo = e.target.closest && e.target.closest('.rb-ref');
       if (alvo) {
