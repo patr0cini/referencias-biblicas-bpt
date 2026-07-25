@@ -169,9 +169,13 @@
     if (!limpo) return { chaves: [], mais: false };
 
     // intervalo entre capítulos: 11:39-12:2 (separador só ":" ou ".")
+    // Guardado como um só token "livro.c1.v1-livro.c2.v2"; a janela expande-o
+    // até ao versículo final, usando os dados carregados.
     var entre = /^(\d+)[:.](\d+)[-–](\d+)[:.](\d+)$/.exec(limpo);
     if (entre) {
-      return { chaves: [livro + '.' + (+entre[1]) + '.' + (+entre[2])], mais: true };
+      var inicio = livro + '.' + (+entre[1]) + '.' + (+entre[2]);
+      var fimCap = livro + '.' + (+entre[3]) + '.' + (+entre[4]);
+      return { chaves: [inicio + '-' + fimCap], mais: false };
     }
 
     var comCap = /^(\d+)[:.,](.+)$/.exec(limpo);
@@ -376,11 +380,37 @@
   function montar(elemento) {
     var chaves = elemento.getAttribute('data-rb').split(',');
     var versos = [];
-    for (var i = 0; i < chaves.length; i++) {
-      var texto = dados[chaves[i]];
-      if (!texto) continue;
-      var partes = chaves[i].split('.');
-      versos.push({ livro: +partes[0], capitulo: +partes[1], versiculo: +partes[2], texto: texto });
+    var truncado = false;
+    var intervaloEntreCap = null; // guarda o token de intervalo entre capítulos, para o título
+
+    function juntar(livro, capitulo, versiculo) {
+      if (versos.length >= cfg.max) { truncado = true; return false; }
+      var t = dados[livro + '.' + capitulo + '.' + versiculo];
+      if (!t) return null; // versículo inexistente (fim do capítulo, ou variante omitida)
+      versos.push({ livro: livro, capitulo: capitulo, versiculo: versiculo, texto: t });
+      return true;
+    }
+
+    for (var i = 0; i < chaves.length && !truncado; i++) {
+      var intervalo = /^(\d+)\.(\d+)\.(\d+)-(\d+)\.(\d+)\.(\d+)$/.exec(chaves[i]);
+      if (intervalo) {
+        // intervalo entre capítulos: enumera do 1.º ao último versículo
+        var lv = +intervalo[1], c1 = +intervalo[2], v1 = +intervalo[3], c2 = +intervalo[5], v2 = +intervalo[6];
+        intervaloEntreCap = { livro: lv, c1: c1, v1: v1, c2: c2, v2: v2 };
+        for (var c = c1; c <= c2 && !truncado; c++) {
+          var vv = (c === c1) ? v1 : 1;
+          while (!truncado) {
+            if (c === c2 && vv > v2) break;              // chegou ao versículo final
+            var r = juntar(lv, c, vv);
+            if (r === false) break;                       // atingiu o limite
+            if (r === null) { if (c === c2 && vv < v2) { vv++; continue; } break; } // fim do capítulo
+            vv++;
+          }
+        }
+      } else {
+        var partes = chaves[i].split('.');
+        juntar(+partes[0], +partes[1], +partes[2]);
+      }
     }
     if (!versos.length) return null;
 
@@ -397,7 +427,10 @@
     }
     var mesmoLC = blocos.every(function (b) { return b.livro === blocos[0].livro && b.capitulo === blocos[0].capitulo; });
     var titulo;
-    if (mesmoLC) {
+    if (intervaloEntreCap) {
+      var iec = intervaloEntreCap;
+      titulo = NOMES[iec.livro - 1] + ' ' + iec.c1 + ':' + iec.v1 + '-' + iec.c2 + ':' + iec.v2;
+    } else if (mesmoLC) {
       var lista = blocos.map(function (b) { return b.fim > b.inicio ? (b.inicio + '-' + b.fim) : ('' + b.inicio); }).join(', ');
       titulo = NOMES[blocos[0].livro - 1] + ' ' + blocos[0].capitulo + ':' + lista;
     } else {
@@ -411,7 +444,7 @@
     var corpo = versos.map(function (x) {
       return '<sup>' + x.versiculo + '</sup> ' + escapar(x.texto);
     }).join(' ');
-    if (elemento.getAttribute('data-rb-mais')) corpo += ' <span class="rb-mais">…</span>';
+    if (truncado || elemento.getAttribute('data-rb-mais')) corpo += ' <span class="rb-mais">…</span>';
 
     var marca = cfg.marca ? '<img class="rb-marca" src="' + escapar(cfg.marca) + '" alt="">' : '';
     var html = '<div class="rb-cab">' + marca + '<span class="rb-titulo">' + escapar(titulo) + '</span></div>'
