@@ -137,7 +137,10 @@
 
   // Faz corresponder o início de uma referência a um livro (com/sem prefixo).
   function casarLivro(texto) {
-    var m = /^([123]|I{1,3})\s*\.?\s*/.exec(texto);
+    // Prefixo de livro numerado: dígito "1/2/3" (colado ou com espaço) ou
+    // numeral romano "I/II/III" SEGUIDO de espaço. Exigir o espaço no numeral
+    // romano evita comer o "I" de "Isaías" (ou "II" de outra palavra).
+    var m = /^([123])\s*\.?\s*/.exec(texto) || /^(I{1,3})\s*\.?\s+/.exec(texto);
     var prefixoTexto = null;
     var resto = texto;
     if (m) {
